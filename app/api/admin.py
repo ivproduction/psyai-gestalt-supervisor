@@ -55,6 +55,47 @@ async def upload_file(file: UploadFile = File(...)):
     return {"filename": file.filename, "size_mb": size_mb, "path": str(dest)}
 
 
+@router.post("/files/upload-txt", summary="Загрузить готовый TXT прямо в data/docs/smart/")
+async def upload_txt(
+    file: UploadFile = File(...),
+    source_type: str = "session_guides",
+    book_name: str = "",
+):
+    """
+    Загружает готовый TXT файл в data/docs/smart/ и создаёт .meta.json рядом.
+    Используется когда PDF не поддаётся конвертации — текст подготовлен вручную.
+
+    - filename должен быть *.txt
+    - source_file в мета будет {basename}.pdf (предполагается что PDF с таким именем существует)
+    """
+    if not file.filename.lower().endswith(".txt"):
+        raise HTTPException(status_code=400, detail="Только TXT файлы")
+
+    import json as _json
+
+    smart_dir = DOCS_DIR["smart"]
+    smart_dir.mkdir(parents=True, exist_ok=True)
+
+    basename = Path(file.filename).stem  # polster → polster
+    txt_path = smart_dir / f"{basename}.txt"
+    content = await file.read()
+    txt_path.write_bytes(content)
+
+    meta = {
+        "source_file": f"{basename}.pdf",
+        "book_name": book_name or basename,
+        "output_file": f"{basename}.txt",
+        "char_count": len(content.decode("utf-8", errors="replace")),
+        "ingest_mode": "smart",
+        "source_type": source_type,
+    }
+    meta_path = smart_dir / f"{basename}.meta.json"
+    meta_path.write_text(_json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    log.info("TXT загружен: %s (%d символов)", txt_path, meta["char_count"])
+    return {"txt": str(txt_path), "meta": str(meta_path), **meta}
+
+
 # ── 2. Список файлов со статусом ──────────────────────────────
 
 @router.get("/files/status", summary="PDF файлы: статус конвертации и эмбеддингов")

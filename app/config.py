@@ -21,7 +21,7 @@ EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2-preview"
 EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "768"))
 RAG_RESPONSE_MODEL: str = os.getenv("RAG_RESPONSE_MODEL", "gemini-2.0-flash")
 RAGAS_MODEL: str = os.getenv("RAGAS_MODEL", "gemini-2.0-flash")
-PDF_PROCESSING_MODEL: str = os.getenv("PDF_PROCESSING_MODEL", "gemini-1.5-flash")
+PDF_PROCESSING_MODEL: str = os.getenv("PDF_PROCESSING_MODEL", "gemini-2.0-flash")
 TOP_K: int = int(os.getenv("TOP_K", "5"))
 LOG_TO_FILE: bool = os.getenv("LOG_TO_FILE", "false").lower() == "true"
 

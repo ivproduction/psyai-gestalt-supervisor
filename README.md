@@ -2,6 +2,8 @@
 
 > RAG-ассистент для начинающих гештальт-терапевтов.
 > Отвечает на вопросы по теории и практике, опираясь на профессиональную литературу — как опытный коллега, а не поисковик.
+>
+> 🌐 **[psycho-pocket.com](https://psycho-pocket.com/)** · 🤖 **[@pocket\_supervisor\_bot](https://t.me/pocket_supervisor_bot)**
 
 ---
 
@@ -37,6 +39,8 @@ Telegram-бот, который помогает начинающим гешта
 | Кэш | **Redis** | кэш ответов TTL 30 дней |
 | Оценка качества | **RAGAS** | faithfulness, relevancy, precision |
 | Оркестрация | **Docker Compose** | 4 сервиса, персистентные volumes |
+| Reverse proxy | **Caddy** | SSL от Let's Encrypt, субдомены, статический лендинг |
+| Деплой | **Portainer** | GitOps, автодеплой при пуше в master |
 
 ---
 
@@ -70,15 +74,19 @@ docker compose --env-file .env.docker up --build -d
 
 ### Продакшен (Portainer GitOps)
 
-Portainer следит за репо и передеплоивает при пуше. Переменные задаются в Portainer UI — только секреты, остальное берётся из дефолтов в `docker-compose.yml`.
+Portainer следит за репо и передеплоивает при пуше в `master`. Переменные задаются в Portainer UI — только секреты, остальное берётся из дефолтов в `docker-compose.yml`.
 
 Обязательные переменные в Portainer:
 ```
 GEMINI_API_KEY=...
 TELEGRAM_BOT_TOKEN=...
+ADMIN_API_KEY=...          # защищает /api/* эндпоинты
+WEBHOOK_SECRET=...         # верификация запросов от Telegram
+TELEGRAM_MODE=webhook
+WEBHOOK_URL=https://gestalt-supervisor.psycho-pocket.com
 ```
 
-Swagger UI: http://localhost:8000/swagger
+Swagger UI: https://gestalt-supervisor.psycho-pocket.com/swagger (требует `X-API-Key`)
 
 ---
 
@@ -131,7 +139,8 @@ Swagger UI: http://localhost:8000/swagger
 
 ## Admin API
 
-Swagger: `http://localhost:8000/swagger`
+Swagger (локально): `http://localhost:8000/swagger`
+Swagger (прод): `https://gestalt-supervisor.psycho-pocket.com/swagger`
 
 ### Управление файлами
 
@@ -181,7 +190,7 @@ context_precision: 1.000   (Qdrant находит только нужные ча
 
 **Режимы запуска** (переключается через `TELEGRAM_MODE`):
 - `polling` — для локальной разработки, не нужен публичный URL
-- `webhook` — для VPS с nginx + SSL, Telegram сам шлёт запросы на сервер
+- `webhook` — для прода (Caddy + SSL), Telegram шлёт запросы напрямую на сервер; верифицируется через `X-Telegram-Bot-Api-Secret-Token`
 
 ---
 
@@ -189,7 +198,7 @@ context_precision: 1.000   (Qdrant находит только нужные ча
 
 | Сервис | Образ | Порт | Данные |
 |---|---|---|---|
-| `app` | python:3.11-slim | 8000 | `app_data:/app/data` |
+| `app` | python:3.11-slim | 8000 (внутри сети) | `app_data:/app/data` |
 | `redis` | redis:7-alpine | 6379 | `redis_data:/data` |
 | `qdrant` | qdrant/qdrant | 6333 | `qdrant_data:/qdrant/storage` |
 | `postgres` | postgres:16-alpine | 5432 | `postgres_data:/var/lib/postgresql/data` |
@@ -206,12 +215,14 @@ context_precision: 1.000   (Qdrant находит только нужные ча
 | `TELEGRAM_BOT_TOKEN` | — | Токен бота от @BotFather (обязательно) |
 | `TELEGRAM_MODE` | `polling` | `polling` или `webhook` |
 | `WEBHOOK_URL` | — | Публичный HTTPS-адрес (только для webhook) |
-| `WEBHOOK_PATH` | `/webhook/telegram` | Путь вебхука |
+| `WEBHOOK_PATH` | `/webhook/gestalt-supervisor` | Путь вебхука |
 | `RAG_RESPONSE_MODEL` | `gemini-3-flash-preview` | Модель генерации ответов |
 | `PDF_PROCESSING_MODEL` | `gemini-1.5-flash` | Модель конвертации PDF |
 | `EMBEDDING_MODEL` | `gemini-embedding-2-preview` | Модель эмбеддингов |
 | `EMBEDDING_DIMENSION` | `768` | Размерность вектора |
 | `TOP_K` | `5` | Количество чанков для контекста |
+| `ADMIN_API_KEY` | — | API ключ для `/api/*` эндпоинтов (обязательно в проде) |
+| `WEBHOOK_SECRET` | — | Secret token для верификации Telegram webhook |
 | `CACHE_TTL_DAYS` | `30` | TTL кэша ответов (дней) |
 | `LOG_TO_FILE` | `false` | Писать логи в `app.log` |
 

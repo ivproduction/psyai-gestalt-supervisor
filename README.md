@@ -76,6 +76,23 @@ docker compose --env-file .env.docker up --build -d
 
 Portainer следит за репо и передеплоивает при пуше в `master`. Переменные задаются в Portainer UI — только секреты, остальное берётся из дефолтов в `docker-compose.yml`.
 
+#### 1. Подготовить Docker-сеть на VM (один раз)
+
+```bash
+# Создать общую сеть для Caddy + всех ботов
+docker network create caddy-public
+
+# Подключить Portainer к этой сети (чтобы был доступен через Caddy)
+docker network connect caddy-public portainer
+```
+
+#### 2. Задеплоить стек Caddy (один раз)
+
+Репо: `https://github.com/ivproduction/caddy-proxy` — содержит `Caddyfile` + лендинг.
+Добавить в Portainer → Stacks → Add stack → Repository.
+
+#### 3. Задеплоить стек приложения
+
 Обязательные переменные в Portainer:
 ```
 GEMINI_API_KEY=...
@@ -85,6 +102,8 @@ WEBHOOK_SECRET=...         # верификация запросов от Telegr
 TELEGRAM_MODE=webhook
 WEBHOOK_URL=https://gestalt-supervisor.psycho-pocket.com
 ```
+
+Приложение автоматически подключается к сети `caddy-public` (задано в `docker-compose.yml`) — Caddy сразу видит контейнер по имени `gestalt-supervisor-app-1`.
 
 Swagger UI: https://gestalt-supervisor.psycho-pocket.com/swagger (требует `X-API-Key`)
 

@@ -70,7 +70,7 @@ async def evaluate_rag(
         log.info("  [%d/%d] %s...", i, len(questions), question[:60])
         try:
             await delete_cached(question)
-            result = await rag_ask(question=question, source_type=source_type, mode=mode, top_k=top_k, use_cache=False)
+            result = await rag_ask(question=question, source_type=source_type, mode=mode, top_k=top_k, use_cache=False, channel="telegram")
             chunks = search(query=question, source_type=source_type, mode=mode, top_k=top_k)
 
             all_questions.append(question)

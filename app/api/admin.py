@@ -12,12 +12,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Security
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
-from app.config import DOCS_DIR, QDRANT_HOST, QDRANT_PORT, RAW_DIR, collection_name
+from app.config import ADMIN_API_KEY, DOCS_DIR, QDRANT_HOST, QDRANT_PORT, RAW_DIR, collection_name
 from app.ingest import convert_file
 from app.ragas import evaluate_rag
 from app.ragas.questions import QUESTIONS as _DEFAULT_QUESTIONS
@@ -26,7 +27,15 @@ from app.vector_store import delete_file_chunks, ingest_to_qdrant
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
+
+
+async def require_api_key(key: str = Security(_api_key_header)):
+    if key != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+
+router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Security(require_api_key)])
 
 
 # ── 1. Загрузка файла ──────────────────────────────────────────

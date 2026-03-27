@@ -11,7 +11,8 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_MODE, WEBHOOK_URL, WEBHOOK_PATH, WEBHOOK_SECRET
+from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_MODE, WEBHOOK_URL, WEBHOOK_PATH, WEBHOOK_SECRET, RATE_LIMIT_REQUESTS, RATE_LIMIT_DAYS
+from app.services.cache import check_rate_limit
 from app.services.rag import ask as rag_ask
 
 log = logging.getLogger(__name__)
@@ -57,6 +58,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     question = update.message.text
     user_id = update.effective_user.id
+
+    allowed, remaining = await check_rate_limit(user_id)
+    if not allowed:
+        await update.message.reply_text(
+            f"⚠️ Вы достигли лимита {RATE_LIMIT_REQUESTS} вопросов за {RATE_LIMIT_DAYS} дня.\n"
+            "Лимит обновится автоматически."
+        )
+        return
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 

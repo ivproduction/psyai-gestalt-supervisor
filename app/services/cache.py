@@ -1,5 +1,5 @@
 """
-services/cache.py — Redis: кэш ответов + история диалога.
+services/cache.py — Redis: кэш ответов + история диалога + rate limit.
 
 Кэш ответов:
   ключ: cache:{sha256(question)}
@@ -10,6 +10,11 @@ services/cache.py — Redis: кэш ответов + история диалог
   структура: список JSON-строк {"role": "user"|"assistant", "text": "..."}
   макс: HISTORY_MAX_MESSAGES (28 сообщений)
   TTL:  HISTORY_TTL_DAYS (14 дней)
+
+Rate limit:
+  ключ: ratelimit:{user_id}
+  TTL:  RATE_LIMIT_DAYS (3 дня) — окно сбрасывается через 3 дня после первого запроса
+  макс: RATE_LIMIT_REQUESTS (20 запросов)
 """
 
 import hashlib
@@ -22,6 +27,8 @@ from app.config import (
     CACHE_TTL_DAYS,
     HISTORY_MAX_MESSAGES,
     HISTORY_TTL_DAYS,
+    RATE_LIMIT_DAYS,
+    RATE_LIMIT_REQUESTS,
     REDIS_HOST,
     REDIS_PORT,
 )
@@ -108,3 +115,30 @@ async def clear_history(user_id: int) -> None:
         await get_redis().delete(_history_key(user_id))
     except Exception as e:
         log.warning("history clear error: %s", e)
+
+
+# ── Rate limit ─────────────────────────────────────────────────
+
+def _ratelimit_key(user_id: int) -> str:
+    return f"ratelimit:{user_id}"
+
+
+async def check_rate_limit(user_id: int) -> tuple[bool, int]:
+    """
+    Проверяет и инкрементирует счётчик запросов пользователя.
+    Возвращает (allowed, remaining) — разрешён ли запрос и сколько осталось.
+    """
+    try:
+        r = get_redis()
+        key = _ratelimit_key(user_id)
+        count = await r.incr(key)
+        if count == 1:
+            await r.expire(key, RATE_LIMIT_DAYS * 86400)
+        remaining = max(0, RATE_LIMIT_REQUESTS - count)
+        allowed = count <= RATE_LIMIT_REQUESTS
+        if not allowed:
+            log.warning("rate limit exceeded: user_id=%d count=%d", user_id, count)
+        return allowed, remaining
+    except Exception as e:
+        log.warning("rate limit error: %s", e)
+        return True, RATE_LIMIT_REQUESTS  # при ошибке Redis — пропускаем

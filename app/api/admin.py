@@ -35,7 +35,7 @@ async def require_api_key(key: str = Security(_api_key_header)):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
 
-router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Security(require_api_key)])
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 # ── 1. Загрузка файла ──────────────────────────────────────────

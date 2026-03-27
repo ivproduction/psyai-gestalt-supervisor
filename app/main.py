@@ -7,9 +7,9 @@ import logging.config
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Security
 
-from app.api.admin import router as admin_router
+from app.api.admin import require_api_key, router as admin_router
 from app.api.chat import router as chat_router
 from app.config import LOG_TO_FILE, TELEGRAM_MODE, WEBHOOK_PATH
 
@@ -66,8 +66,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(admin_router)
-app.include_router(chat_router)
+app.include_router(admin_router, dependencies=[Security(require_api_key)])
+app.include_router(chat_router, dependencies=[Security(require_api_key)])
 
 
 if TELEGRAM_MODE == "webhook":

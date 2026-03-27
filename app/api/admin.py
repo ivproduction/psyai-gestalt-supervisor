@@ -81,7 +81,10 @@ async def upload_txt(
     txt_path = smart_dir / f"{basename}.txt"
     content = await file.read()
 
-    (RAW_DIR / file.filename).write_bytes(content)
+    # сохраняем в raw только если нет PDF с таким же именем
+    pdf_exists = (RAW_DIR / f"{basename}.pdf").exists()
+    if not pdf_exists:
+        (RAW_DIR / file.filename).write_bytes(content)
     txt_path.write_bytes(content)
 
     meta = {

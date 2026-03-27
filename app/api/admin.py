@@ -316,6 +316,46 @@ def delete_ingest(
     return {"filename": filename, "collection": coll, "deleted_chunks": deleted}
 
 
+@router.delete("/files/{filename}", summary="Полностью удалить файл: raw + docs + эмбеддинги")
+def delete_file(filename: str, source_type: str = "session_guides"):
+    """
+    Удаляет всё связанное с файлом:
+    - data/raw/{filename}
+    - data/docs/smart/{stem}.txt + .meta.json
+    - data/docs/standard/{stem}.txt + .meta.json
+    - эмбеддинги из всех коллекций Qdrant (smart + standard)
+
+    filename — имя файла в data/raw/ (например polster.pdf или polster.txt)
+    """
+    stem = Path(filename).stem
+    deleted_files = []
+    deleted_chunks = {}
+
+    # raw
+    raw_path = RAW_DIR / filename
+    if raw_path.exists():
+        raw_path.unlink()
+        deleted_files.append(str(raw_path))
+
+    # docs
+    for mode in ("smart", "standard"):
+        txt = DOCS_DIR[mode] / f"{stem}.txt"
+        meta = DOCS_DIR[mode] / f"{stem}.meta.json"
+        for p in (txt, meta):
+            if p.exists():
+                p.unlink()
+                deleted_files.append(str(p))
+
+        # эмбеддинги (source_file хранится как stem.pdf)
+        source_file_key = f"{stem}.pdf"
+        chunks = delete_file_chunks(source_file_key, source_type, mode)
+        if chunks:
+            deleted_chunks[collection_name(source_type, mode)] = chunks
+
+    log.info("Удалён файл '%s': файлов=%d, чанков=%s", filename, len(deleted_files), deleted_chunks)
+    return {"filename": filename, "deleted_files": deleted_files, "deleted_chunks": deleted_chunks}
+
+
 # ── Поиск (дебаг) ─────────────────────────────────────────────
 
 @router.get("/search", summary="Семантический поиск (дебаг)")

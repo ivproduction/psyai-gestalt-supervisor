@@ -4,19 +4,23 @@ Swagger UI: http://localhost:8000/docs
 Префикс: /admin
 """
 
+import asyncio
 import json
 import logging
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
 from app.config import DOCS_DIR, QDRANT_HOST, QDRANT_PORT, RAW_DIR, collection_name
 from app.ingest import convert_file
-from app.services.ragas_eval import DEFAULT_QUESTIONS, evaluate_rag
+from app.ragas import evaluate_rag
+from app.ragas.questions import QUESTIONS as _DEFAULT_QUESTIONS
 from app.services.search import search as qdrant_search
 from app.vector_store import delete_file_chunks, ingest_to_qdrant
 
@@ -228,31 +232,75 @@ def search(
 
 # ── RAGAS оценка качества ─────────────────────────────────────
 
-@router.post("/ragas", summary="Оценить качество RAG через RAGAS")
-async def ragas_evaluate(
-    questions: list[str] | None = None,
-    source_type: str = "session_guides",
-    mode: Literal["standard", "smart"] = "smart",
-):
+class RagasRequest(BaseModel):
+    source_type: str = "session_guides"
+    mode: Literal["standard", "smart"] = "smart"
+    questions: list[str] = Field(
+        default_factory=lambda: list(_DEFAULT_QUESTIONS),
+        description="Вопросы для оценки. Каждый вопрос — строка на русском из предметной области.",
+    )
+
+
+async def _ragas_background(questions, source_type, mode):
+    from app.config import RAGAS_DIR
+    try:
+        await evaluate_rag(questions=questions, source_type=source_type, mode=mode)
+    except Exception as e:
+        log.error("RAGAS фоновая ошибка: %s", e, exc_info=True)
+        RAGAS_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        err_path = RAGAS_DIR / f"{source_type}_{mode}_{ts}.json"
+        err_path.write_text(json.dumps({
+            "timestamp": datetime.now().isoformat(),
+            "collection": f"{source_type}_{mode}",
+            "questions_evaluated": len(questions) if questions else 0,
+            "scores": {"faithfulness": None, "answer_relevancy": None, "context_precision": None},
+            "details": [],
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+        log.error("RAGAS отчёт об ошибке сохранён: %s", err_path)
+
+
+@router.post("/ragas", summary="Запустить RAGAS оценку (фоново)")
+async def ragas_evaluate(body: RagasRequest = RagasRequest()):
     """
-    Запускает RAGAS оценку качества RAG пайплайна.
+    Запускает RAGAS оценку в фоне и сразу возвращает ответ.
+    Результат сохраняется в `data/ragas/`.
 
     Метрики:
     - **faithfulness** — ответ основан на контексте (нет галлюцинаций)
     - **answer_relevancy** — ответ релевантен вопросу
     - **context_precision** — retrieved чанки действительно нужны
 
-    Если `questions` не переданы — используются стандартные тест-вопросы.
-    Занимает 1-3 минуты.
+    Вопросы по умолчанию — из `app/ragas/questions.py`. Занимает 3-5 минут.
     """
-    try:
-        return await evaluate_rag(
-            questions=questions,
-            source_type=source_type,
-            mode=mode,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    asyncio.create_task(_ragas_background(
+        questions=body.questions or None,
+        source_type=body.source_type,
+        mode=body.mode,
+    ))
+    return {
+        "status": "started",
+        "collection": f"{body.source_type}_{body.mode}",
+        "questions": len(body.questions),
+        "check_results": "GET /admin/ragas/results",
+        "hint": "Займёт 3-5 минут. Следи за логами или проверяй результаты по ссылке выше.",
+    }
+
+
+@router.get("/ragas/results", summary="История результатов RAGAS")
+def ragas_results(last: int = 1):
+    """
+    Возвращает последние N результатов оценки из data/ragas/.
+
+    - **last** — сколько последних запусков показать (по умолчанию 1)
+    """
+    from app.config import RAGAS_DIR
+    files = sorted(RAGAS_DIR.glob("*.json"), reverse=True)[:last]
+    if not files:
+        return []
+    return [json.loads(f.read_text(encoding="utf-8")) for f in files]
 
 
 # ── Кэш ──────────────────────────────────────────────────────

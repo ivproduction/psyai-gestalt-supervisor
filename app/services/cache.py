@@ -60,6 +60,14 @@ async def get_cached(question: str) -> str | None:
         return None
 
 
+async def delete_cached(question: str) -> None:
+    try:
+        await get_redis().delete(_question_key(question))
+        log.info("cache DEL: %s...", question[:40])
+    except Exception as e:
+        log.warning("cache delete error: %s", e)
+
+
 async def set_cached(question: str, answer: str) -> None:
     try:
         ttl = CACHE_TTL_DAYS * 86400

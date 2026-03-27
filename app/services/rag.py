@@ -16,7 +16,7 @@ from typing import Literal
 from google import genai as google_genai
 
 from app.config import GEMINI_API_KEY, RAG_RESPONSE_MODEL, TOP_K
-from app.services.cache import get_cached, set_cached
+from app.services.cache import get_cached, set_cached, delete_cached
 from app.services.search import search
 
 log = logging.getLogger(__name__)
@@ -45,11 +45,13 @@ async def ask(
     source_type: str = "session_guides",
     mode: Literal["standard", "smart"] = "smart",
     top_k: int = TOP_K,
+    use_cache: bool = True,
 ) -> dict:
     """
     RAG пайплайн. Возвращает:
       {answer, from_cache, chunks_used, collection}
 
+    use_cache=False — не читать и не писать кэш (используется при RAGAS оценке).
     user_id зарезервирован для будущей персонализации.
     """
     t_total = time.perf_counter()
@@ -57,26 +59,29 @@ async def ask(
 
     log.info("━━━ RAG START ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     log.info("  вопрос   : %s", question)
-    log.info("  коллекция: %s | top_k=%d", collection, top_k)
+    log.info("  коллекция: %s | top_k=%d | cache=%s", collection, top_k, use_cache)
 
     # ── Кэш ───────────────────────────────────────────────────
-    t0 = time.perf_counter()
-    cached = await get_cached(question)
-    t_cache = time.perf_counter() - t0
+    if use_cache:
+        t0 = time.perf_counter()
+        cached = await get_cached(question)
+        t_cache = time.perf_counter() - t0
 
-    if cached:
-        t_total_ms = (time.perf_counter() - t_total) * 1000
-        log.info("  [CACHE]  ✅ HIT (%.0f мс) → ответ %d симв.", t_cache * 1000, len(cached))
-        log.info("  итого    : %.0f мс", t_total_ms)
-        log.info("━━━ RAG END ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        return {
-            "answer": cached,
-            "from_cache": True,
-            "chunks_used": None,
-            "collection": collection,
-        }
+        if cached:
+            t_total_ms = (time.perf_counter() - t_total) * 1000
+            log.info("  [CACHE]  ✅ HIT (%.0f мс) → ответ %d симв.", t_cache * 1000, len(cached))
+            log.info("  итого    : %.0f мс", t_total_ms)
+            log.info("━━━ RAG END ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            return {
+                "answer": cached,
+                "from_cache": True,
+                "chunks_used": None,
+                "collection": collection,
+            }
 
-    log.info("  [CACHE]  ❌ MISS (%.0f мс)", t_cache * 1000)
+        log.info("  [CACHE]  ❌ MISS (%.0f мс)", t_cache * 1000)
+    else:
+        log.info("  [CACHE]  ⏭ пропущен (RAGAS режим)")
 
     # ── Поиск в Qdrant ─────────────────────────────────────────
     t0 = time.perf_counter()
@@ -116,8 +121,11 @@ async def ask(
     log.info("  [GENERATE] ✅ ответ=%d симв. (%.0f мс)", len(answer), t_gen * 1000)
 
     # ── Кэш ───────────────────────────────────────────────────
-    await set_cached(question, answer)
-    log.info("  [CACHE]  💾 сохранён")
+    if use_cache:
+        await set_cached(question, answer)
+        log.info("  [CACHE]  💾 сохранён")
+    else:
+        log.info("  [CACHE]  ⏭ не сохраняем (RAGAS режим)")
 
     t_total_ms = (time.perf_counter() - t_total) * 1000
     log.info("  итого    : %.0f мс  (search=%.0f + generate=%.0f)",

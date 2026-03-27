@@ -69,7 +69,7 @@ def ingest_to_qdrant(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
     )
-    chunks = splitter.split_text(text)
+    chunks = [c for c in splitter.split_text(text) if len(c.strip()) >= 50]
     if not chunks:
         return 0
 

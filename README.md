@@ -40,34 +40,42 @@ Telegram-бот, который помогает начинающим гешта
 
 ---
 
-## Быстрый старт
+## Варианты запуска
+
+### Локально — приложение без Docker
+
+Для разработки: Redis/Qdrant/Postgres в Docker, приложение запускается напрямую.
 
 ```bash
-# 1. Настрой переменные окружения
-cp .env.docker .env.docker   # вставь GEMINI_API_KEY и TELEGRAM_BOT_TOKEN
-
-# 2. Запусти
-docker compose up --build -d
-
-# 3. Открой Swagger
-open http://localhost:8000/swagger
-```
-
----
-
-## Локальная разработка
-
-```bash
-# Настрой .env (хосты на localhost, polling-режим бота)
 cp .env.example .env
 # Заполни GEMINI_API_KEY, TELEGRAM_BOT_TOKEN
-# TELEGRAM_MODE=polling уже стоит по умолчанию
+# Хосты: REDIS_HOST=localhost, QDRANT_HOST=localhost
 
-# Запусти инфраструктуру (redis, qdrant, postgres)
+# Запусти инфраструктуру
 docker compose up redis qdrant postgres -d
 
-# Запусти приложение локально
+# Запусти приложение
 uv run uvicorn app.main:app --reload
+```
+
+### Локально — всё в Docker
+
+```bash
+cp .env.example .env.docker
+# Заполни GEMINI_API_KEY, TELEGRAM_BOT_TOKEN
+# Хосты: REDIS_HOST=redis, QDRANT_HOST=qdrant
+
+docker compose --env-file .env.docker up --build -d
+```
+
+### Продакшен (Portainer GitOps)
+
+Portainer следит за репо и передеплоивает при пуше. Переменные задаются в Portainer UI — только секреты, остальное берётся из дефолтов в `docker-compose.yml`.
+
+Обязательные переменные в Portainer:
+```
+GEMINI_API_KEY=...
+TELEGRAM_BOT_TOKEN=...
 ```
 
 Swagger UI: http://localhost:8000/swagger

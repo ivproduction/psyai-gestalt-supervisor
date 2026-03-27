@@ -14,6 +14,7 @@ services:
       TELEGRAM_MODE: ${TELEGRAM_MODE:-polling}
       WEBHOOK_URL: ${WEBHOOK_URL:-}
       WEBHOOK_PATH: ${WEBHOOK_PATH:-/webhook/gestalt-supervisor}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       QDRANT_HOST: ${QDRANT_HOST:-qdrant}

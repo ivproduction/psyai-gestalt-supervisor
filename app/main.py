@@ -7,11 +7,11 @@ import logging.config
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Security
+from fastapi import FastAPI, HTTPException, Request, Security
 
 from app.api.admin import require_api_key, router as admin_router
 from app.api.chat import router as chat_router
-from app.config import LOG_TO_FILE, TELEGRAM_MODE, WEBHOOK_PATH
+from app.config import LOG_TO_FILE, TELEGRAM_MODE, WEBHOOK_PATH, WEBHOOK_SECRET
 
 _fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _log_file = str(Path(__file__).resolve().parent.parent / "app.log")
@@ -73,6 +73,10 @@ app.include_router(chat_router, dependencies=[Security(require_api_key)])
 if TELEGRAM_MODE == "webhook":
     @app.post(WEBHOOK_PATH, include_in_schema=False)
     async def telegram_webhook(request: Request):
+        if WEBHOOK_SECRET:
+            token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+            if token != WEBHOOK_SECRET:
+                raise HTTPException(status_code=403, detail="Forbidden")
         from app.bot.handlers import process_update
         data = await request.json()
         await process_update(data)

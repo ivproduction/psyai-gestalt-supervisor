@@ -25,6 +25,7 @@ TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_MODE: str = os.getenv("TELEGRAM_MODE", "polling")   # polling | webhook
 WEBHOOK_URL: str = os.getenv("WEBHOOK_URL", "")              # https://yourdomain.com
 WEBHOOK_PATH: str = os.getenv("WEBHOOK_PATH", "/webhook/gestalt-supervisor")
+WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "")
 
 RAW_DIR = Path("data/raw")
 DOCS_DIR = {

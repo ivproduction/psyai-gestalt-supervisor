@@ -11,7 +11,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_MODE, WEBHOOK_URL, WEBHOOK_PATH
+from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_MODE, WEBHOOK_URL, WEBHOOK_PATH, WEBHOOK_SECRET
 from app.services.rag import ask as rag_ask
 
 log = logging.getLogger(__name__)
@@ -133,7 +133,7 @@ async def startup() -> None:
 
     if TELEGRAM_MODE == "webhook":
         url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
-        await _bot_app.bot.set_webhook(url)
+        await _bot_app.bot.set_webhook(url, secret_token=WEBHOOK_SECRET or None)
         log.info("Telegram webhook установлен: %s", url)
     else:
         await _bot_app.updater.start_polling()

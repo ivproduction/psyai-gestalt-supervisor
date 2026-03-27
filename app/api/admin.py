@@ -222,7 +222,7 @@ def ingest_file(
         )
 
     text = txt_path.read_text(encoding="utf-8")
-    source_file = name.replace("_", " ").removesuffix(".txt") + ".pdf"
+    source_file = name.removesuffix(".txt") + ".pdf"
 
     log.info("=== INGEST [%s / %s] %s ===", source_type, mode, name)
     try:

@@ -10,13 +10,10 @@ from google import genai as google_genai
 from google.genai import types
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from qdrant_client import QdrantClient
-from qdrant_client.models import (
-    Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
-)
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from app.config import (
     EMBEDDING_DIMENSION, EMBEDDING_MODEL, GEMINI_API_KEY, QDRANT_HOST, QDRANT_PORT,
-    collection_name,
 )
 
 CHUNK_SIZE = 800
@@ -46,7 +43,10 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
         result = _genai.models.embed_content(
             model=EMBEDDING_MODEL,
             contents=batch,
-            config=types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIMENSION),
+            config=types.EmbedContentConfig(
+                task_type="retrieval_document",
+                output_dimensionality=EMBEDDING_DIMENSION
+            ),
         )
         all_embeddings.extend([e.values for e in result.embeddings])
         if i + EMBED_BATCH < len(texts):
@@ -57,47 +57,40 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
 def ingest_to_qdrant(
     text: str,
     source_file: str,
-    source_type: str,
-    mode: str,
+    collection: str,
 ) -> int:
     """
-    Полный пайплайн: текст → чанки → эмбеддинги → Qdrant.
-    Коллекция: {source_type}_{mode}
-    Возвращает количество загруженных чанков.
+    Текст → чанки → эмбеддинги → Qdrant.
+    Коллекция задаётся явно. Возвращает количество загруженных чанков.
     """
+    md_splitter = MarkdownHeaderTextSplitter(
+        headers_to_split_on=[("#", "h1"), ("##", "h2"), ("###", "h3")],
+        strip_headers=False,
+    )
     char_splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
     )
 
-    if mode == "smart":
-        # smart-текст содержит ## заголовки — режем по смыслу, крупные секции дробим дополнительно
-        md_splitter = MarkdownHeaderTextSplitter(
-            headers_to_split_on=[("#", "h1"), ("##", "h2"), ("###", "h3")],
-            strip_headers=False,
-        )
-        sections = md_splitter.split_text(text)
-        raw_chunks = []
-        for section in sections:
-            section_text = section.page_content.strip()
-            if not section_text:
-                continue
-            if len(section_text) > CHUNK_SIZE:
-                raw_chunks.extend(char_splitter.split_text(section_text))
-            else:
-                raw_chunks.append(section_text)
-    else:
-        raw_chunks = char_splitter.split_text(text)
+    sections = md_splitter.split_text(text)
+    raw_chunks = []
+    for section in sections:
+        section_text = section.page_content.strip()
+        if not section_text:
+            continue
+        if len(section_text) > CHUNK_SIZE:
+            raw_chunks.extend(char_splitter.split_text(section_text))
+        else:
+            raw_chunks.append(section_text)
 
     chunks = [c for c in raw_chunks if len(c.strip()) >= 50]
     if not chunks:
         return 0
 
     embeddings = embed_texts(chunks)
-    coll = collection_name(source_type, mode)
 
     client = get_client()
-    ensure_collection(client, coll)
+    ensure_collection(client, collection)
 
     points = [
         PointStruct(
@@ -106,36 +99,19 @@ def ingest_to_qdrant(
             payload={
                 "text": chunk,
                 "source_file": source_file,
-                "source_type": source_type,
-                "mode": mode,
                 "chunk_index": i,
             },
         )
         for i, (chunk, emb) in enumerate(zip(chunks, embeddings))
     ]
 
-    client.upsert(collection_name=coll, points=points)
+    client.upsert(collection_name=collection, points=points)
     return len(chunks)
 
 
-def delete_file_chunks(source_file: str, source_type: str, mode: str) -> int:
-    """
-    Удаляет все чанки файла из коллекции.
-    Возвращает количество удалённых точек.
-    """
-    coll = collection_name(source_type, mode)
+def delete_collection(collection: str) -> None:
+    """Удаляет коллекцию из Qdrant. Молча игнорирует если не существует."""
     client = get_client()
-
     existing = {c.name for c in client.get_collections().collections}
-    if coll not in existing:
-        return 0
-
-    before = client.get_collection(coll).points_count
-    client.delete(
-        collection_name=coll,
-        points_selector=Filter(
-            must=[FieldCondition(key="source_file", match=MatchValue(value=source_file))]
-        ),
-    )
-    after = client.get_collection(coll).points_count
-    return before - after
+    if collection in existing:
+        client.delete_collection(collection)

@@ -21,35 +21,18 @@ EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2-preview"
 EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "768"))
 RAG_RESPONSE_MODEL: str = os.getenv("RAG_RESPONSE_MODEL", "gemini-2.0-flash")
 RAGAS_MODEL: str = os.getenv("RAGAS_MODEL", "gemini-2.0-flash")
-PDF_PROCESSING_MODEL: str = os.getenv("PDF_PROCESSING_MODEL", "gemini-2.0-flash")
 TOP_K: int = int(os.getenv("TOP_K", "5"))
 LOG_TO_FILE: bool = os.getenv("LOG_TO_FILE", "false").lower() == "true"
 
 ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", "")
 
 TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_MODE: str = os.getenv("TELEGRAM_MODE", "polling")   # polling | webhook
-WEBHOOK_URL: str = os.getenv("WEBHOOK_URL", "")              # https://yourdomain.com
+TELEGRAM_MODE: str = os.getenv("TELEGRAM_MODE", "polling")
+WEBHOOK_URL: str = os.getenv("WEBHOOK_URL", "")
 WEBHOOK_PATH: str = os.getenv("WEBHOOK_PATH", "/webhook/gestalt-supervisor")
 WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "")
 
-RAW_DIR = Path("data/raw")
-DOCS_DIR = {
-    "standard": Path("data/docs/standard"),
-    "smart":    Path("data/docs/smart"),
-}
+RAG_COLLECTION: str = os.getenv("RAG_COLLECTION", "session_guides")
+
+DOCS_DIR = Path("data/docs")
 RAGAS_DIR = Path("data/ragas")
-
-DEFAULT_SKIP_HEADERS = 5
-
-
-def collection_name(source_type: str, mode: str) -> str:
-    """Динамическое имя коллекции: session_guides_smart, therapist_finder_standard, ..."""
-    return f"{source_type}_{mode}"
-
-
-# Алиасы для коллекций загруженных до введения source_type
-LEGACY_COLLECTIONS = {
-    "gestalt_standard": ("session_guides", "standard"),
-    "gestalt_smart":    ("session_guides", "smart"),
-}

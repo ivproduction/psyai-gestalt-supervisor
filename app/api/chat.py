@@ -6,8 +6,6 @@ api/chat.py — основные пользовательские эндпоин
 TODO: добавить историю диалога, персонализацию по user_id.
 """
 
-from typing import Literal
-
 from fastapi import APIRouter, HTTPException
 
 from app.services import rag
@@ -16,18 +14,12 @@ router = APIRouter(prefix="/api/app", tags=["app"])
 
 
 @router.post("/ask", summary="Задать вопрос супервизору")
-async def ask(
-    question: str,
-    source_type: str = "session_guides",
-    mode: Literal["standard", "smart"] = "smart",
-):
+async def ask(question: str):
     """
     RAG пайплайн: поиск в базе знаний + генерация ответа через Gemini.
-
-    - **source_type** — тип базы знаний (session_guides, ...)
-    - **mode** — коллекция: smart (рекомендуется) или standard
+    Коллекция задаётся через RAG_COLLECTION в .env.
     """
     try:
-        return await rag.ask(question=question, source_type=source_type, mode=mode)
+        return await rag.ask(question=question)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

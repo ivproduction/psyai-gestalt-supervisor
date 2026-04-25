@@ -1,13 +1,8 @@
 """
 services/search.py — семантический поиск по Qdrant.
-
-Используется в:
-  - api/admin.py  (/admin/search — дебаг)
-  - services/rag.py (контекст для генерации)
 """
 
 import logging
-from typing import Literal
 
 from google import genai as google_genai
 from google.genai import types
@@ -16,7 +11,7 @@ from qdrant_client.models import FieldCondition, Filter, MatchValue
 
 from app.config import (
     EMBEDDING_DIMENSION, EMBEDDING_MODEL, GEMINI_API_KEY,
-    QDRANT_HOST, QDRANT_PORT, TOP_K, collection_name,
+    QDRANT_HOST, QDRANT_PORT, TOP_K,
 )
 
 log = logging.getLogger(__name__)
@@ -39,26 +34,23 @@ def _embed_query(text: str) -> list[float]:
 
 def search(
     query: str,
-    source_type: str = "session_guides",
-    mode: Literal["standard", "smart"] = "smart",
+    collection: str,
     top_k: int = TOP_K,
     source_file: str | None = None,
 ) -> list[dict]:
     """
-    Семантический поиск по коллекции {source_type}_{mode}.
+    Семантический поиск по коллекции Qdrant.
 
     Args:
-        query:       запрос на любом языке
-        source_type: тип источника (session_guides, therapist_finder, ...)
-        mode:        standard или smart
-        top_k:       количество результатов
-        source_file: фильтр по конкретному файлу
+        query:      запрос на любом языке
+        collection: имя коллекции Qdrant
+        top_k:      количество результатов
+        source_file: опциональный фильтр по файлу
 
     Returns:
-        [{score, text, source_file, source_type, chunk_index}, ...]
+        [{score, text, source_file, chunk_index}, ...]
     """
-    coll = collection_name(source_type, mode)
-    log.info("search: '%s' → %s top_k=%d source_file=%s", query, coll, top_k, source_file)
+    log.info("search: '%s' → %s top_k=%d", query, collection, top_k)
 
     query_vector = _embed_query(query)
 
@@ -69,7 +61,7 @@ def search(
         )
 
     response = _qdrant.query_points(
-        collection_name=coll,
+        collection_name=collection,
         query=query_vector,
         limit=top_k,
         query_filter=query_filter,
@@ -81,7 +73,6 @@ def search(
             "score": round(hit.score, 4),
             "text": hit.payload.get("text", ""),
             "source_file": hit.payload.get("source_file"),
-            "source_type": hit.payload.get("source_type"),
             "chunk_index": hit.payload.get("chunk_index"),
         }
         for hit in response.points

@@ -76,8 +76,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         result = await rag_ask(
             question=question,
             user_id=user_id,
-            source_type="session_guides",
-            mode="smart",
             channel="telegram",
         )
         for part in _split_message(result["answer"]):

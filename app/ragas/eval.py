@@ -24,7 +24,7 @@ from ragas.metrics._faithfulness import Faithfulness
 from ragas.metrics._answer_relevance import AnswerRelevancy
 from ragas.metrics._context_precision import LLMContextPrecisionWithoutReference
 
-from app.config import EMBEDDING_MODEL, GEMINI_API_KEY, RAGAS_DIR, RAGAS_MODEL, TOP_K
+from app.config import EMBEDDING_MODEL, GEMINI_API_KEY, RAG_COLLECTION, RAGAS_DIR, RAGAS_MODEL, TOP_K
 from app.services.cache import delete_cached
 from app.services.rag import ask as rag_ask
 from app.services.search import search
@@ -53,16 +53,17 @@ def _get_ragas_embeddings():
 
 async def evaluate_rag(
     questions: list[str] | None = None,
-    source_type: str = "session_guides",
-    mode: Literal["standard", "smart"] = "smart",
+    collection: str | None = None,
     top_k: int = TOP_K,
 ) -> dict:
+    if collection is None:
+        collection = RAG_COLLECTION
+
     if not questions:
         log.info("  вопросы не переданы → используем QUESTIONS из questions.py")
         questions = QUESTIONS
 
-    log.info("=== RAGAS START: %d вопросов, коллекция=%s_%s ===",
-             len(questions), source_type, mode)
+    log.info("=== RAGAS START: %d вопросов, коллекция=%s ===", len(questions), collection)
 
     all_questions, all_answers, all_contexts = [], [], []
 
@@ -70,8 +71,8 @@ async def evaluate_rag(
         log.info("  [%d/%d] %s...", i, len(questions), question[:60])
         try:
             await delete_cached(question)
-            result = await rag_ask(question=question, source_type=source_type, mode=mode, top_k=top_k, use_cache=False, channel="telegram")
-            chunks = search(query=question, source_type=source_type, mode=mode, top_k=top_k)
+            result = await rag_ask(question=question, collection=collection, top_k=top_k, use_cache=False, channel="telegram")
+            chunks = search(query=question, collection=collection, top_k=top_k)
 
             all_questions.append(question)
             all_answers.append(result["answer"])
@@ -149,7 +150,7 @@ async def evaluate_rag(
 
     report = {
         "timestamp": datetime.now().isoformat(),
-        "collection": f"{source_type}_{mode}",
+        "collection": collection,
         "questions_evaluated": len(all_questions),
         "scores": scores,
         "details": details,
@@ -158,7 +159,7 @@ async def evaluate_rag(
     try:
         RAGAS_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = RAGAS_DIR / f"{source_type}_{mode}_{ts}.json"
+        report_path = RAGAS_DIR / f"{collection}_{ts}.json"
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         log.info("  💾 результат сохранён: %s", report_path)
     except Exception as e:

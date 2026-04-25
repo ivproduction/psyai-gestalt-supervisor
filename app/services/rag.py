@@ -16,7 +16,7 @@ from typing import Literal
 
 from google import genai as google_genai
 
-from app.config import GEMINI_API_KEY, RAG_RESPONSE_MODEL, TOP_K
+from app.config import GEMINI_API_KEY, RAG_COLLECTION, RAG_RESPONSE_MODEL, TOP_K
 from app.services.cache import get_cached, set_cached
 from app.services.search import search as _search_sync
 
@@ -75,8 +75,7 @@ TELEGRAM_RAG_PROMPT = """Используй следующие фрагмент�
 async def ask(
     question: str,
     user_id: int = 0,
-    source_type: str = "session_guides",
-    mode: Literal["standard", "smart"] = "smart",
+    collection: str | None = None,
     top_k: int = TOP_K,
     use_cache: bool = True,
     channel: str = "api",
@@ -89,7 +88,8 @@ async def ask(
     user_id зарезервирован для будущей персонализации.
     """
     t_total = time.perf_counter()
-    collection = f"{source_type}_{mode}"
+    if collection is None:
+        collection = RAG_COLLECTION
 
     log.info("━━━ RAG START ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     log.info("  вопрос   : %s", question)
@@ -119,7 +119,7 @@ async def ask(
 
     # ── Поиск в Qdrant ─────────────────────────────────────────
     t0 = time.perf_counter()
-    chunks = await asyncio.to_thread(_search_sync, question, source_type, mode, top_k)
+    chunks = await asyncio.to_thread(_search_sync, question, collection, top_k)
     t_search = time.perf_counter() - t0
 
     if not chunks:
